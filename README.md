@@ -1,7 +1,7 @@
 # Trendora
 **Learning Android Architecture with MVVM & Jetpack Compose**
 
-A modern e-commerce Android application built to demonstrate **MVVM Architecture**, **Jetpack Compose**, **Dependency Injection**, and **Testing** best practices.
+A modern m-commerce Android application built to demonstrate **MVVM Architecture**, **Jetpack Compose**, **Dependency Injection**, and **Testing** best practices.
 
 ## 📱 Screenshots
 *Screenshots will be added as we progress through sessions*
@@ -13,12 +13,11 @@ This project is designed as a hands-on learning experience across 4 sessions:
 
 ### Session 1: Architecture Foundation ✅
 - MVVM pattern implementation
-- StateFlow for state management
 - Jetpack Compose UI
 - Mock data repository
 
 ### Session 2: Patterns & Dependency Injection 🔄
-- Real API integration with Retrofit
+- Fake API integration with Retrofit
 - Hilt for dependency injection
 - Repository pattern
 - Observer, Strategy, and Command patterns
