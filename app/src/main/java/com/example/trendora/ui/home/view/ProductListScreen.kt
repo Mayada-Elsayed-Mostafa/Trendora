@@ -1,4 +1,4 @@
-package com.example.trendora.ui.home
+package com.example.trendora.ui.home.view
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -21,23 +22,25 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,110 +49,200 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.trendora.model.Product
-
+import com.example.trendora.ui.home.viewmodel.ProductViewModel
+import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductListScreen(
-    viewModel: ProductViewModel = viewModel()
+    viewModel: ProductViewModel = koinViewModel() // Using Koin to get ViewModel
 ) {
-    val products by viewModel.products.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val error by viewModel.error.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var searchQuery by remember { mutableStateOf("") }
+    // Show error as snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = "M-Commerce App",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                titleContentColor = MaterialTheme.colorScheme.onPrimary
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { error ->
+            snackbarHostState.showSnackbar(
+                message = error,
+                actionLabel = "Dismiss"
             )
-        )
+            viewModel.clearError()
+        }
+    }
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = {
-                searchQuery = it
-                viewModel.searchProducts(it)
-            },
-            label = { Text("Search products...") },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search"
-                )
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "E-Commerce App",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                actions = {
                     IconButton(
-                        onClick = {
-                            searchQuery = ""
-                            viewModel.searchProducts("")
-                        }
+                        onClick = { viewModel.refreshProducts() }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "Clear"
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }
-            },
+            )
+        }
+    ) { paddingValues ->
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            singleLine = true
-        )
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Search Bar
+            SearchBar(
+                query = uiState.searchQuery,
+                onQueryChange = { viewModel.searchProducts(it) },
+                isSearching = uiState.isSearching
+            )
 
-        when {
-            isLoading -> {
-                LoadingState()
-            }
+            // Category Filter
+            CategoryFilter(
+                categories = uiState.categories,
+                selectedCategory = uiState.selectedCategory,
+                onCategorySelected = { viewModel.filterByCategory(it) }
+            )
 
-            error != null -> {
-                ErrorState(
-                    error = "error",
-                    onRetry = { viewModel.refreshProducts() }
-                )
-            }
+            // Content
+            when {
+                uiState.isLoading -> {
+                    LoadingState()
+                }
 
-            products.isEmpty() -> {
-                EmptyState()
-            }
+                uiState.products.isEmpty() && !uiState.isLoading -> {
+                    EmptyState(
+                        message = if (uiState.searchQuery.isNotEmpty()) {
+                            "No products found for '${uiState.searchQuery}'"
+                        } else {
+                            "No products available"
+                        }
+                    )
+                }
 
-            else -> {
-                ProductList(
-                    products = products,
-                    onProductClick = { product ->
-                        // TODO: Navigate to product details
-                        println("Clicked on: ${product.title}")
-                    }
-                )
+                else -> {
+                    ProductList(
+                        products = uiState.products,
+                        isRefreshing = uiState.isRefreshing,
+                        onProductClick = { product ->
+                            // TODO: Navigate to product details
+                            println("Clicked on: ${product.title}")
+                        },
+                        onRefresh = { viewModel.refreshProducts() }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
+fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    isSearching: Boolean
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        label = { Text("Search products...") },
+        leadingIcon = {
+            if (isSearching) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search"
+                )
+            }
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear"
+                    )
+                }
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        singleLine = true
+    )
+}
+
+@Composable
+fun CategoryFilter(
+    categories: List<String>,
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit
+) {
+    if (categories.isNotEmpty()) {
+        LazyRow(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(categories) { category ->
+                FilterChip(
+                    onClick = { onCategorySelected(category) },
+                    label = { Text(category.replaceFirstChar { it.uppercase() }) },
+                    selected = category == selectedCategory
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
 fun ProductList(
     products: List<Product>,
-    onProductClick: (Product) -> Unit
+    isRefreshing: Boolean,
+    onProductClick: (Product) -> Unit,
+    onRefresh: () -> Unit
 ) {
+    // Pull to refresh implementation would go here
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (isRefreshing) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
         items(products) { product ->
             ProductItem(
                 product = product,
@@ -159,6 +252,7 @@ fun ProductList(
     }
 }
 
+// ProductItem component stays the same as Session 1
 @Composable
 fun ProductItem(
     product: Product,
@@ -176,6 +270,7 @@ fun ProductItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Product Image
             AsyncImage(
                 model = product.image,
                 contentDescription = product.title,
@@ -185,6 +280,7 @@ fun ProductItem(
                 contentScale = ContentScale.Crop
             )
 
+            // Product Details
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -207,7 +303,7 @@ fun ProductItem(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "$${product.price}",
+                    text = "${product.price}",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -215,6 +311,7 @@ fun ProductItem(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // Rating
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -235,6 +332,7 @@ fun ProductItem(
                 }
             }
 
+            // Arrow Icon
             Icon(
                 imageVector = Icons.Default.KeyboardArrowRight,
                 contentDescription = "View Details",
@@ -258,7 +356,7 @@ fun LoadingState() {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Loading products...",
+                text = "Loading products from API...",
                 style = MaterialTheme.typography.bodyLarge
             )
         }
@@ -266,56 +364,7 @@ fun LoadingState() {
 }
 
 @Composable
-fun ErrorState(
-    error: String,
-    onRetry: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Clear,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.error
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Oops! Something went wrong",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = error,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = onRetry) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Try Again")
-        }
-    }
-}
-
-@Composable
-fun EmptyState() {
+fun EmptyState(message: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -333,17 +382,9 @@ fun EmptyState() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "No products found",
+            text = message,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Try searching for something else",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
